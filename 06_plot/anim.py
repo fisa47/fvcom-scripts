@@ -1,10 +1,62 @@
 import xarray as xr
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation, FFMpegWriter
+import contextily as ctx
+import pandas as pd
+import numpy as np
 
 # Load dataset
-ds_all = xr.open_dataset('../run-output/pipe_ave/adamselv_v01_0001.nc', decode_times=False).isel(siglay=1)
+ds_all = xr.open_dataset('../run-output/pipe_ave/adamselv_v01_0001.nc', decode_times=False)
+
+
+# Volume preprocessing
+def unstructured_grid_volume(area, depth, surface_elevation, thickness):
+    dz = np.abs(np.diff(thickness, axis=0))
+    volume = (area * (surface_elevation + depth))
+    depth_volume = volume[:, np.newaxis, :] * dz[np.newaxis, ...]
+    return depth_volume
+
+# Load required vars
+area = ds_all['art1'].values
+depth = ds_all['h'].values
+surface_elevation = ds_all['zeta'].values
+thickness = ds_all['siglev'].values
+time = ds_all.time.values
+
+# Calculate volume and mass
+vol = unstructured_grid_volume(area, depth, surface_elevation, thickness)
+tracer1_mass = vol * ds_all['tracer1_c'].values
+tracer2_mass = vol * ds_all['tracer2_c'].values
+
+# Pipe discharge setup (adjust as needed)
+pipe_c = 10
+pipe_discharge = 5.3 / 60  # m3/s
+tracer_mass_discharged = pipe_c * pipe_discharge * (np.abs(time[0] - time) * 86400) 
+
+# Mass conservation correction
+int_mass1 = tracer1_mass.sum(axis=(-1, -2))
+int_mass2 = tracer2_mass.sum(axis=(-1, -2))
+
+cal1 = tracer_mass_discharged / int_mass1
+cal2 = tracer_mass_discharged / int_mass2
+cal1[0] = 1
+cal2[0] = 1
+
+# Apply correction
+tracer1_mass = tracer1_mass * cal1[:, np.newaxis, np.newaxis]
+tracer2_mass = tracer2_mass * cal2[:, np.newaxis, np.newaxis]
+
+# Recalculate concentration
+tracer1_conc = tracer1_mass / vol
+tracer2_conc = tracer2_mass / vol
+
+# Assign to dataset
+ds_all['tracer1_c'].values = tracer1_conc
+ds_all['tracer2_c'].values = tracer2_conc
+
 print(ds_all)
+
+ds_all = ds_all.isel(siglay=1)
 
 # Global min/max for consistent color scaling
 vminmax = {
@@ -36,6 +88,9 @@ def init():
         ax.set_xlim(9.32e5, 9.38e5)
         ax.set_ylim(7.853e6, 7.86e6)
         ax.grid(True)
+
+        # Add basemap
+        ctx.add_basemap(ax, crs='EPSG:32633', source=ctx.providers.CartoDB.Positron, attribution_size=6)
 
         # Add static colorbar
         colorbars[var] = fig.colorbar(plots[var], ax=ax, label=var)

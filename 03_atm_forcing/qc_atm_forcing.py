@@ -2,8 +2,7 @@ import xarray as xr
 import numpy as np
 import matplotlib.pyplot as plt
 
-ds = xr.open_dataset('forcing/adamselv_forcing_evap0.nc', decode_times=False)
-# ds = xr.open_dataset('output/adamselv_forcing_TEST.nc', decode_times=False)
+ds = xr.open_dataset('/Users/Admin/Documents/scripts/fvcom-work/Adamselv/03_atm_forcing/output/adamselv_forcing_20180201-20180630.nc', decode_times=False)
 
 
 for k in ds.keys():

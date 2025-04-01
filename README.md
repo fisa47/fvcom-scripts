@@ -4,7 +4,7 @@
 ## Project Structure Overview
 
 ```
-Adamselv/
+Case/
 ├── 01_build_grid/
 ├── 02_build_rivers/
 ├── 03_atm_forcing/
@@ -17,11 +17,11 @@ Adamselv/
 ## 1. Grid Generation (`01_build_grid/`)
 
 ### Purpose:
-This step builds the model grid from 2DM and bathymetric data, preparing the simulation domain.
+This step builds the model grid from .2DM that we get from SMS and bathymetric data (EMODNET).
 
 ### Key Scripts:
-- `2dm_to_grid_fvtools.py`: Converts SMS 2DM files into structured grid data.
-- `boundary_prepro.py`: Processes boundary conditions, like open ocean boundaries.
+- `2dm_to_grid_fvtools.py`: Converts SMS 2DM files into grid.
+- `boundary_prepro.py`: Processes open boundaries.
 - `make_grd_adamselv.py`: Main driver script for assembling the grid and domain configuration.
 
 ### Inputs:

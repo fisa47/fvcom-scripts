@@ -6,7 +6,7 @@ sys.path.append('/Users/Admin/Documents/scripts/pyfvcom')
 import PyFVCOM as pf
 
 casename = f'adamselv_v01'
-out_file = nc.Dataset(f'adamselv_v01_0001.nc')
+out_file = nc.Dataset(f'adamselv_v01_0001-pipe.nc')
 node_sig_deps = out_file['siglay_center'][:] * out_file['h_center'][:][np.newaxis,:]
 
 x = out_file['x'][:]
@@ -15,7 +15,7 @@ xc = out_file['xc'][:]
 yc = out_file['yc'][:]
 tri = np.asarray(out_file['nv'][:] - 1).T
 
-original_config = pf.read.get_river_config(f'input/RiverNamelist.nml')
+original_config = pf.read.get_river_config(f'RiverNamelist.nml')
 old_locs = original_config['RIVER_GRID_LOCATION']
 
 ob = np.hstack(pf.grid.get_boundary_polygons(tri))
@@ -70,5 +70,5 @@ def write_river_namelist(output_file, conf_dict):
 
 original_config['RIVER_GRID_LOCATION'] = new_locs
 
-write_river_namelist(f'input/{casename}_river_node.nml', original_config)
+write_river_namelist(f'{casename}_river_node.nml', original_config)
 

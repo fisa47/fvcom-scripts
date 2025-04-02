@@ -9,6 +9,42 @@ import numpy as np
 ds_all = xr.open_dataset('../run-output/pipe_ave/adamselv_v01_0001.nc', decode_times=False)
 
 
+def correct_tracer_concentration(ds, tracer_name, vol, time, pipe_concentration=10, pipe_discharge=5.3/60):
+    """
+    Applies mass correction to a tracer and returns corrected concentration.
+
+    Parameters:
+    -----------
+    ds : xarray.Dataset
+        Dataset containing the tracer.
+    tracer_name : str
+        Name of the tracer variable in the dataset (e.g. 'tracer1_c').
+    vol : np.ndarray
+        3D array of volume per cell [time, layers, elements].
+    time : np.ndarray
+        1D array of days since FVCOM origin
+    pipe_concentration : float
+        Tracer concentration at the pipe (default 10).
+    pipe_discharge : float
+        Discharge rate from the pipe in m³/s (default 5.3/60).
+    
+    Returns:
+    --------
+    tracer_conc : np.ndarray
+        Corrected concentration of the tracer [time, layers, elements].
+    """
+    tracer_mass = vol * ds[tracer_name].values
+    tracer_mass_discharged = pipe_concentration * pipe_discharge * (np.abs(time[0] - time) * 86400)
+
+    int_mass = tracer_mass.sum(axis=(-1, -2))
+    calibration = tracer_mass_discharged / int_mass
+    calibration[0] = 1  # avoid NaN or inf in the first timestep
+
+    corrected_mass = tracer_mass * calibration[:, np.newaxis, np.newaxis]
+    tracer_conc = corrected_mass / vol
+    return tracer_conc
+
+
 # Volume preprocessing
 def unstructured_grid_volume(area, depth, surface_elevation, thickness):
     dz = np.abs(np.diff(thickness, axis=0))
@@ -25,38 +61,18 @@ time = ds_all.time.values
 
 # Calculate volume and mass
 vol = unstructured_grid_volume(area, depth, surface_elevation, thickness)
-tracer1_mass = vol * ds_all['tracer1_c'].values
-tracer2_mass = vol * ds_all['tracer2_c'].values
-
-# Pipe discharge setup (adjust as needed)
-pipe_c = 10
-pipe_discharge = 5.3 / 60  # m3/s
-tracer_mass_discharged = pipe_c * pipe_discharge * (np.abs(time[0] - time) * 86400) 
-
-# Mass conservation correction
-int_mass1 = tracer1_mass.sum(axis=(-1, -2))
-int_mass2 = tracer2_mass.sum(axis=(-1, -2))
-
-cal1 = tracer_mass_discharged / int_mass1
-cal2 = tracer_mass_discharged / int_mass2
-cal1[0] = 1
-cal2[0] = 1
-
-# Apply correction
-tracer1_mass = tracer1_mass * cal1[:, np.newaxis, np.newaxis]
-tracer2_mass = tracer2_mass * cal2[:, np.newaxis, np.newaxis]
-
-# Recalculate concentration
-tracer1_conc = tracer1_mass / vol
-tracer2_conc = tracer2_mass / vol
-
-# Assign to dataset
-ds_all['tracer1_c'].values = tracer1_conc
-ds_all['tracer2_c'].values = tracer2_conc
 
 print(ds_all)
 
+tracer1_conc = correct_tracer_concentration(ds_all, 'tracer1_c', vol, time)
+tracer2_conc = correct_tracer_concentration(ds_all, 'tracer2_c', vol, time)
+
+# Get the 2nd from the bottom layer
 ds_all = ds_all.isel(siglay=1)
+# Apply correction to both tracers and NB!!! get max concentration across depth layers
+ds_all['tracer1_c'].values = tracer1_conc.max(axis=1)  # max across depth layers
+ds_all['tracer2_c'].values = tracer2_conc.max(axis=1)
+
 
 # Global min/max for consistent color scaling
 vminmax = {
@@ -64,18 +80,23 @@ vminmax = {
     for var in ['temp', 'salinity', 'tracer1_c', 'tracer2_c', 'ua', 'va']
 }
 
+vminmax['tracer1_c'] = (0, 1)
+
 # Setup figure and axes
-fig, axs = plt.subplots(3, 2, figsize=(15, 15), sharex=True, sharey=True)
+fig, axs = plt.subplots(3, 2, figsize=(12, 12), sharex=True, sharey=True)
 plots = {}
 colorbars = {}
+
+time_discharge = time[28] # 14th day
 
 def init():
     ds = ds_all.isel(time=0)
     variables = ['temp', 'salinity', 'tracer1_c', 'tracer2_c', 'ua', 'va']
+    titles = ['temperature', 'salinity', 'tracer1_c, MAX in water column', 'tracer2_c, MAX in water column', 'u', 'v']
     cmaps = ['plasma', 'viridis', 'magma_r', 'magma_r', 'PuBuGn', 'PuBuGn']
     positions = [(0, 0), (0, 1), (1, 0), (1, 1), (2, 0), (2, 1)]
 
-    for var, cmap, pos in zip(variables, cmaps, positions):
+    for var, title, cmap, pos in zip(variables, titles, cmaps, positions):
         ax = axs[pos]
         if var in ['ua', 'va']:
             x, y = ds['xc'], ds['yc']
@@ -84,7 +105,7 @@ def init():
 
         plots[var] = ax.scatter(x, y, c=ds[var], cmap=cmap, s=1,
                                 vmin=vminmax[var][0], vmax=vminmax[var][1])
-        ax.set_title(var)
+        ax.set_title(title)
         ax.set_xlim(9.32e5, 9.38e5)
         ax.set_ylim(7.853e6, 7.86e6)
         ax.grid(True)
@@ -99,12 +120,18 @@ def init():
 
 def update(i):
     ds = ds_all.isel(time=i)
-    plots['temp'].set_array(ds['temp'].values)
-    plots['salinity'].set_array(ds['salinity'].values)
-    plots['tracer1_c'].set_array(ds['tracer1_c'].values)
-    plots['tracer2_c'].set_array(ds['tracer2_c'].values)
-    plots['ua'].set_array(ds['ua'].values)
-    plots['va'].set_array(ds['va'].values)
+    current_time = time[i]
+    # time is in days since FVCOM origin
+    delta_days = (current_time - time_discharge)
+
+    for var in plots:
+        plots[var].set_array(ds[var].values)
+
+    if delta_days >= 0:
+        fig.suptitle(f"Days since discharge: {delta_days:.2f}", fontsize=16)
+    else:
+        fig.suptitle(f"Days before discharge: {abs(delta_days):.2f}", fontsize=16)
+
     print(f"Frame {i} updated")
     return plots.values()
 
@@ -113,6 +140,6 @@ anim = FuncAnimation(fig, update, init_func=init, frames=60, blit=False)
 
 # Save as MP4
 writer = FFMpegWriter(fps=1, metadata=dict(artist='Python'), bitrate=1800)
-anim.save("output_animation2.mp4", writer=writer)
+anim.save("output_animation3.mp4", writer=writer)
 
 plt.close()

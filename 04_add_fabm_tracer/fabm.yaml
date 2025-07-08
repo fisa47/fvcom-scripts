@@ -1,0 +1,30 @@
+instances:
+  tracer1:            #Imidacloprid from intermittent release
+    model: akvaplan/tracer_sed
+    parameters:
+      w: 0.0                    # sinking velocity (m d-1), default = 0.0
+      k: 0                      # decay rate (half-life = ln(2)/k) (d-1), default = 0.0
+      temperature_dependence: 0   # temperature dependence of decay (0: none, 1: Q10, 2: Arrhenius), default = 0 NOT USED IN IMIDACLOPRID MODEL - HARDCODED
+      #T_ref: 10.0                 # temperature for which decay rate k is given (degree_C)
+      #Q10: 1.0                    # Q10 temperature coefficient (1: no temperature dependence) (-), default = 1.0
+      density: 1026.
+      do_sed: .false.
+    initialization:
+      c: 0.0                      # concentration
+      c_bot: 0.                  # concentration at bottom
+  tracer2:
+    model: akvaplan/tracer_sed
+    parameters:
+      w: 216.0
+      k: 0.0
+      temperature_dependence: 0
+      density: 1460.0
+      specific_volume: 1
+      do_sed: .true.
+      resusp_meth: 1
+      crt_shear: 0.01
+      erate: 0.00035
+      bed_por: 0.6
+    initialization:
+      c: 0.0
+      c_bot: 0.0

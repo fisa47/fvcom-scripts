@@ -19,3 +19,4 @@ examples/
 04_add_fabm_tracer/.ipynb_checkpoints/make_input-checkpoint.py
 *.mp4
 *checkpoint.py
+*.pdf
